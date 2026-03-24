@@ -257,6 +257,28 @@ table.ct .th-mo.cur{top:28px;background:#e8f5e9;color:#2e7d32;font-weight:700;bo
 <div class="toast" id="toast"></div>
 
 <script>
+// ── SUPABASE ───────────────────────────────────────────
+const SB_URL='https://vsxqlyhrakxqiwtdevsj.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZzeHFseWhyYWt4cWl3dGRldnNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNjAzNjksImV4cCI6MjA4OTkzNjM2OX0.k5Mn7g8oy796qs64Sr_jLRRjZWlGEgaiawExHpxj4nI';
+const SB_HDR={'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'};
+const SBC={done:new Set(),owners:{},people:[]};
+async function sbGet(table,qs){const r=await fetch(`${SB_URL}/rest/v1/${table}${qs?'?'+qs:''}`,{headers:SB_HDR});return r.ok?r.json():[];}
+async function sbUpsert(table,row){await fetch(`${SB_URL}/rest/v1/${table}`,{method:'POST',headers:{...SB_HDR,'Prefer':'resolution=merge-duplicates'},body:JSON.stringify(row)});}
+async function sbDel(table,qs){await fetch(`${SB_URL}/rest/v1/${table}?${qs}`,{method:'DELETE',headers:SB_HDR});}
+async function initSupabase(){
+  try{
+    const[comp,own,ppl]=await Promise.all([
+      sbGet('task_completions','done=eq.true&select=task_id'),
+      sbGet('task_owners','select=task_id,owner'),
+      sbGet('team_people','select=name&order=created_at.asc')
+    ]);
+    SBC.done=new Set(comp.map(r=>r.task_id));
+    SBC.owners={};for(const r of own)SBC.owners[r.task_id]=r.owner;
+    SBC.people=ppl.map(r=>r.name);
+  }catch(e){console.warn('Supabase init failed',e);}
+  draw();
+}
+
 // ── CONSTANTS ──────────────────────────────────────────
 const MN=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 function genM(y0,y1){const r=[];for(let y=y0;y<=y1;y++)for(let m=1;m<=12;m++)r.push(`${y}-${String(m).padStart(2,'0')}`);return r;}
@@ -493,10 +515,14 @@ function getVisMonths(shown){
 const ALL_PROJS=[...new Set(S.towers.map(t=>t.proj))];
 
 // ── EQUIPO (personas responsables) ────────────────────
-function getPeople(){return JSON.parse(localStorage.getItem('croco_people')||'[]');}
-function savePeople(arr){localStorage.setItem('croco_people',JSON.stringify(arr));}
-function getOwners(){return JSON.parse(localStorage.getItem('croco_task_owners')||'{}');}
-function setOwner(taskId,person){const o=getOwners();if(person)o[taskId]=person;else delete o[taskId];localStorage.setItem('croco_task_owners',JSON.stringify(o));draw();}
+function getPeople(){return SBC.people;}
+function getOwners(){return SBC.owners;}
+function setOwner(taskId,person){
+  if(person)SBC.owners[taskId]=person;else delete SBC.owners[taskId];
+  draw();
+  if(person)sbUpsert('task_owners',{task_id:taskId,owner:person,updated_at:new Date().toISOString()});
+  else sbDel('task_owners','task_id=eq.'+encodeURIComponent(taskId));
+}
 function buildEqList(){
   const people=getPeople();
   if(!people.length) return `<div style="color:#bbb;font-size:13px;text-align:center;padding:16px 0">Aún no hay personas configuradas</div>`;
@@ -507,17 +533,20 @@ function buildEqList(){
   </div>`).join('');
 }
 function addPerson(name){
-  const p=getPeople();const n=name.trim();
-  if(n&&!p.includes(n)){p.push(n);savePeople(p);}
+  const n=name.trim();
+  if(n&&!SBC.people.includes(n)){
+    SBC.people.push(n);
+    sbUpsert('team_people',{name:n,created_at:new Date().toISOString()});
+  }
   setTimeout(()=>{openM('equipo');draw();},0);
 }
 function removePerson(idx){
-  const p=getPeople();
-  const name=p[idx];
+  const name=SBC.people[idx];
   if(name===undefined) return;
-  p.splice(idx,1);savePeople(p);
-  const o=getOwners();for(const k of Object.keys(o))if(o[k]===name)delete o[k];
-  localStorage.setItem('croco_task_owners',JSON.stringify(o));
+  SBC.people.splice(idx,1);
+  for(const k of Object.keys(SBC.owners))if(SBC.owners[k]===name)delete SBC.owners[k];
+  sbDel('team_people','name=eq.'+encodeURIComponent(name));
+  sbDel('task_owners','owner=eq.'+encodeURIComponent(name));
   setTimeout(()=>{openM('equipo');draw();},0);
 }
 function personColor(name){let h=0;for(const c of name)h=(h*37+c.charCodeAt(0))%360;return `hsl(${h},42%,42%)`;}
@@ -957,9 +986,13 @@ function toggleProcF(k){
 }
 
 // ── TAREAS ────────────────────────────────────────────
-function getDone(){return new Set(JSON.parse(localStorage.getItem('croco_tasks_done')||'[]'));}
-function setDone(s){localStorage.setItem('croco_tasks_done',JSON.stringify([...s]));}
-function toggleTask(id){const d=getDone();if(d.has(id))d.delete(id);else d.add(id);setDone(d);draw();}
+function getDone(){return SBC.done;}
+function toggleTask(id){
+  const wasDone=SBC.done.has(id);
+  if(wasDone)SBC.done.delete(id);else SBC.done.add(id);
+  draw();
+  sbUpsert('task_completions',{task_id:id,done:!wasDone,completed_at:!wasDone?new Date().toISOString():null});
+}
 
 function badgeCls(type){
   const t=(type||'').toLowerCase();
@@ -1148,7 +1181,7 @@ function draw(){
   else if(S.view==='registrar') el.innerHTML=rReg();
   else if(S.view==='tareas') el.innerHTML=rTareas();
 }
-draw();
+initSupabase();
 </script>
 </body>
 </html>
