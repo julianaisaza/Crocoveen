@@ -465,6 +465,7 @@ def main():
     print(f"\n── Total: {len(all_results)} torres parseadas ──")
     update_html(all_results)
     push_to_github(FOLDER)
+    send_reminder(all_results)
 
 # ── 7. GitHub push ──────────────────────────────────────────────
 def push_to_github(folder):
@@ -501,6 +502,211 @@ def push_to_github(folder):
     except subprocess.CalledProcessError:
         print("❌  Error al subir. Verifica tu conexión y que hayas hecho la configuración inicial.")
 
-# ── 8. Main ─────────────────────────────────────────────────────
+# ── 8. Email recordatorio ────────────────────────────────────────
+import smtplib, ssl, json as _json
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from urllib.request import Request as _Req, urlopen as _urlopen
+from datetime import date as _date, timedelta as _td
+
+SB_URL_E = 'https://vsxqlyhrakxqiwtdevsj.supabase.co'
+SB_KEY_E = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZzeHFseWhyYWt4cWl3dGRldnNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNjAzNjksImV4cCI6MjA4OTkzNjM2OX0.k5Mn7g8oy796qs64Sr_jLRRjZWlGEgaiawExHpxj4nI'
+
+EMAIL_TO = [
+    'jisaza@tierragrata.co',
+    'andresmesab@tierragrata.co',
+    'vroldan@tierragrata.co',
+    'jbarbosa@tierragrata.co',
+    'jsuarez@tierragrata.co',
+    'jarango@tierragrata.co',
+    'nparra@tierragrata.co',
+    'chincapie@tierragrata.co',
+    'aestrada@tierragrata.co',
+    'dsierra@tierragrata.co',
+]
+
+def _sb_get(table, qs=''):
+    url = f'{SB_URL_E}/rest/v1/{table}' + (f'?{qs}' if qs else '')
+    req = _Req(url, headers={'apikey': SB_KEY_E, 'Authorization': f'Bearer {SB_KEY_E}'})
+    try:
+        with _urlopen(req, timeout=10) as r:
+            return _json.loads(r.read())
+    except Exception as e:
+        print(f"  ⚠️  Supabase: {e}")
+        return []
+
+def _extract_towers():
+    try:
+        with open(HTML, encoding='utf-8') as f:
+            content = f.read()
+        m = re.search(r'towers:\s*\[([^\]]*)\]', content, re.DOTALL)
+        if not m: return []
+        towers = []
+        for tm in re.finditer(r'\{[^}]+\}', m.group(1)):
+            o = tm.group(0)
+            t = {}
+            for field in ['id','name','proj']:
+                fm = re.search(rf"{field}:'([^']*)'", o)
+                if fm: t[field] = fm.group(1)
+            for field in ['tot','sold']:
+                fm = re.search(rf"{field}:(\d+)", o)
+                if fm: t[field] = int(fm.group(1))
+            if 'id' in t: towers.append(t)
+        return towers
+    except: return []
+
+def _extract_milestones():
+    try:
+        with open(HTML, encoding='utf-8') as f:
+            content = f.read()
+        items = re.findall(
+            r"\{id:(\d+),tid:'([^']+)',type:'([^']*)',date:'([^']*)',desc:'([^']*)'\}",
+            content)
+        return [{'id':i,'tid':tid,'type':tp,'date':dt,'desc':ds}
+                for i,tid,tp,dt,ds in items]
+    except: return []
+
+def _build_tasks():
+    towers   = {t['id']: t for t in _extract_towers()}
+    tasks    = []
+    for m in _extract_milestones():
+        t = towers.get(m['tid'], {})
+        tasks.append({'id':'m'+m['id'],'tid':m['tid'],
+                      'proj':t.get('proj',''),'name':m['desc'] or m['type'],
+                      'type':m['type'],'date':m['date'],'tower':t.get('name',m['tid'])})
+    for t in towers.values():
+        if t.get('sold',0) < t.get('tot',0)*0.7:
+            tasks.append({'id':'pe_'+t['id'],'tid':t['id'],'proj':t.get('proj',''),
+                          'name':'70% en ventas','type':'PE','date':None,'tower':t.get('name',t['id'])})
+    return tasks
+
+def _mes(ym):
+    if not ym: return ''
+    MN=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+    try: y,m=ym.split('-'); return f"{MN[int(m)-1]}-{y[2:]}"
+    except: return ym
+
+def send_reminder(all_results):
+    cfg_path = os.path.join(FOLDER, 'config.json')
+    if not os.path.exists(cfg_path):
+        print("\n📧 Email: crea config.json con tus credenciales para activar recordatorios.")
+        return
+    with open(cfg_path, encoding='utf-8') as f:
+        cfg = _json.load(f)
+    email_from = cfg.get('email_from','')
+    email_pass = cfg.get('email_password','')
+    if not email_from or not email_pass or email_pass == 'TU_CONTRASEÑA':
+        print("\n📧 Email: completa email_from y email_password en config.json")
+        return
+
+    print("\n📧 Preparando correo de recordatorio...")
+    comp    = _sb_get('task_completions','done=eq.true&select=task_id,completed_at')
+    own_raw = _sb_get('task_owners','select=task_id,owner')
+    done_ids= {r['task_id'] for r in comp}
+    done_at = {r['task_id']: (r.get('completed_at') or '')[:10] for r in comp}
+    owners  = {r['task_id']: r['owner'] for r in own_raw}
+
+    tasks   = _build_tasks()
+    today   = _date.today()
+    w_ago   = (today - _td(days=7)).isoformat()[:7]
+    w_ahead = (today + _td(days=7)).isoformat()[:7]
+    today_s = today.isoformat()[:7]
+
+    pending   = [t for t in tasks if t['id'] not in done_ids]
+    upcoming  = [t for t in pending if t.get('date') and today_s <= t['date'] <= w_ahead]
+    comp_week = [t for t in tasks if t['id'] in done_ids and done_at.get(t['id'],'') >= w_ago]
+
+    def _owner_badge(tid):
+        o = owners.get(tid,'')
+        if o: return f'<span style="background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:10px;font-size:11px">{o}</span>'
+        return '<span style="color:#ccc;font-size:11px">—</span>'
+
+    def _row3(t):
+        return (f'<tr><td style="padding:7px 12px;border-bottom:1px solid #f0f0f0;font-size:13px">'
+                f'{t["name"]} <span style="color:#aaa;font-size:11px">{t["tower"]}</span></td>'
+                f'<td style="padding:7px 12px;border-bottom:1px solid #f0f0f0;font-size:12px;color:#888">{_mes(t.get("date"))}</td>'
+                f'<td style="padding:7px 12px;border-bottom:1px solid #f0f0f0">{_owner_badge(t["id"])}</td></tr>')
+
+    def _row2(t):
+        return (f'<tr><td style="padding:7px 12px;border-bottom:1px solid #f0f0f0;font-size:13px">'
+                f'{t["name"]} <span style="color:#aaa;font-size:11px">{t["tower"]}</span></td>'
+                f'<td style="padding:7px 12px;border-bottom:1px solid #f0f0f0;font-size:12px;color:#888">{_mes(t.get("date"))}</td></tr>')
+
+    by_proj = {}
+    for t in pending:
+        by_proj.setdefault(t['proj'] or 'Sin proyecto', []).append(t)
+    pend_rows = ''
+    for proj, ts in sorted(by_proj.items()):
+        pend_rows += (f'<tr><td colspan="3" style="padding:8px 12px 3px;background:#f9f9f9;'
+                      f'font-weight:700;color:#2e7d32;font-size:11px;text-transform:uppercase">{proj}</td></tr>')
+        for t in ts[:15]: pend_rows += _row3(t)
+
+    up_rows   = ''.join(_row3(t) for t in upcoming) or '<tr><td colspan="3" style="padding:12px;color:#aaa;text-align:center">Ninguna tarea vence esta semana 🎉</td></tr>'
+    comp_rows = ''.join(_row2(t) for t in comp_week[:15]) or '<tr><td colspan="2" style="padding:12px;color:#aaa;text-align:center">Ninguna completada esta semana</td></tr>'
+
+    MES_ES = {'January':'enero','February':'febrero','March':'marzo','April':'abril',
+              'May':'mayo','June':'junio','July':'julio','August':'agosto',
+              'September':'septiembre','October':'octubre','November':'noviembre','December':'diciembre'}
+    fecha_str = today.strftime('%d de %B de %Y')
+    for en,es in MES_ES.items(): fecha_str = fecha_str.replace(en,es)
+
+    TH = 'style="padding:7px 12px;text-align:left;font-size:11px;color:#888;font-weight:600;border-bottom:2px solid #eee"'
+    html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f5f5f5;font-family:Arial,sans-serif">
+<div style="max-width:640px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08)">
+  <div style="background:#1b5e20;padding:28px 32px">
+    <div style="font-size:22px;font-weight:700;color:#fff">🌿 Crocoveen</div>
+    <div style="color:#a5d6a7;font-size:13px;margin-top:4px">Resumen semanal · {fecha_str}</div>
+  </div>
+  <div style="display:flex;padding:18px 32px;gap:12px;background:#f9fbe7;border-bottom:1px solid #e8f5e9">
+    <div style="flex:1;text-align:center"><div style="font-size:26px;font-weight:700;color:#1b5e20">{len(pending)}</div><div style="font-size:11px;color:#666">Pendientes</div></div>
+    <div style="flex:1;text-align:center"><div style="font-size:26px;font-weight:700;color:#e65100">{len(upcoming)}</div><div style="font-size:11px;color:#666">Vencen esta semana</div></div>
+    <div style="flex:1;text-align:center"><div style="font-size:26px;font-weight:700;color:#388e3c">{len(comp_week)}</div><div style="font-size:11px;color:#666">Completadas (7 días)</div></div>
+  </div>
+  <div style="padding:22px 32px 0">
+    <div style="font-size:14px;font-weight:700;color:#333;margin-bottom:10px">⚡ Vencen esta semana</div>
+    <table style="width:100%;border-collapse:collapse">
+      <tr style="background:#fff8e1"><th {TH}>TAREA</th><th {TH}>FECHA</th><th {TH}>RESPONSABLE</th></tr>
+      {up_rows}
+    </table>
+  </div>
+  <div style="padding:22px 32px 0">
+    <div style="font-size:14px;font-weight:700;color:#333;margin-bottom:10px">📋 Pendientes por proyecto</div>
+    <table style="width:100%;border-collapse:collapse">
+      <tr style="background:#f5f5f5"><th {TH}>TAREA</th><th {TH}>FECHA</th><th {TH}>RESPONSABLE</th></tr>
+      {pend_rows or '<tr><td colspan="3" style="padding:12px;color:#aaa;text-align:center">No hay tareas pendientes 🎉</td></tr>'}
+    </table>
+  </div>
+  <div style="padding:22px 32px">
+    <div style="font-size:14px;font-weight:700;color:#333;margin-bottom:10px">✅ Completadas esta semana</div>
+    <table style="width:100%;border-collapse:collapse">
+      <tr style="background:#f1f8e9"><th {TH}>TAREA</th><th {TH}>FECHA</th></tr>
+      {comp_rows}
+    </table>
+  </div>
+  <div style="padding:0 32px 28px;text-align:center">
+    <a href="https://julianaisaza.github.io/Crocoveen" style="display:inline-block;background:#1b5e20;color:#fff;text-decoration:none;padding:11px 26px;border-radius:8px;font-weight:600;font-size:13px">Ver Crocoveen →</a>
+  </div>
+  <div style="background:#f5f5f5;padding:14px 32px;text-align:center">
+    <div style="font-size:11px;color:#aaa">Correo automático semanal · Tierra Grata & Co.</div>
+  </div>
+</div></body></html>"""
+
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = f'🌿 Crocoveen — Resumen semanal {today.strftime("%d/%m/%Y")}'
+    msg['From']    = email_from
+    msg['To']      = ', '.join(EMAIL_TO)
+    msg.attach(MIMEText(html, 'html', 'utf-8'))
+    try:
+        ctx = ssl.create_default_context()
+        with smtplib.SMTP('smtp.office365.com', 587) as s:
+            s.ehlo(); s.starttls(context=ctx); s.login(email_from, email_pass)
+            s.sendmail(email_from, EMAIL_TO, msg.as_string())
+        print(f"✓  Correo enviado a {len(EMAIL_TO)} personas.")
+    except Exception as e:
+        print(f"❌  Error enviando correo: {e}")
+        print("   Verifica email_from y email_password en config.json")
+
+# ── 9. Main ─────────────────────────────────────────────────────
 if __name__ == '__main__':
     main()
