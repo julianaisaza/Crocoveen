@@ -17,8 +17,9 @@ import openpyxl, glob, re, os, sys, json
 from datetime import datetime
 
 # ── 1. Configuración ────────────────────────────────────────────
-FOLDER = sys.argv[1] if len(sys.argv) > 1 else os.path.dirname(os.path.abspath(__file__))
-HTML   = os.path.join(FOLDER, "crocoveen.html")
+FOLDER       = sys.argv[1] if len(sys.argv) > 1 else os.path.dirname(os.path.abspath(__file__))
+EXCEL_FOLDER = os.path.dirname(FOLDER)   # carpeta padre: donde viven los Excel de ventas
+HTML         = os.path.join(FOLDER, "crocoveen.html")
 
 MO = {'ene':1,'feb':2,'mar':3,'abr':4,'may':5,'jun':6,
       'jul':7,'ago':8,'sep':9,'oct':10,'nov':11,'dic':12}
@@ -437,12 +438,16 @@ def _parse_periodo(texto):
 
 
 def _read_actividades():
-    """Lee 'Actividades Proyectos.xlsx' y devuelve lista de dicts."""
+    """Lee 'Actividades Proyectos.xlsx' — busca en EXCEL_FOLDER (padre) y luego en FOLDER."""
     for fname in ['Actividades Proyectos.xlsx', 'actividades proyectos.xlsx',
                   'actividades_proyectos.xlsx', 'Actividades_Proyectos.xlsx']:
-        fpath = os.path.join(FOLDER, fname)
-        if os.path.exists(fpath):
-            break
+        for base in [EXCEL_FOLDER, FOLDER]:
+            fpath = os.path.join(base, fname)
+            if os.path.exists(fpath):
+                break
+        else:
+            continue
+        break
     else:
         return []
 
@@ -792,11 +797,12 @@ def update_html(all_results):
 
 # ── 6. Main ─────────────────────────────────────────────────────
 def main():
-    print(f"📂 Carpeta: {FOLDER}")
-    print(f"📄 HTML: {HTML}\n")
+    print(f"📂 App:    {FOLDER}")
+    print(f"📂 Excel:  {EXCEL_FOLDER}")
+    print(f"📄 HTML:   {HTML}\n")
 
     xl_files = [
-        f for f in glob.glob(os.path.join(FOLDER, "*.xlsx"))
+        f for f in glob.glob(os.path.join(EXCEL_FOLDER, "*.xlsx"))
         if 'Crocoveen' in os.path.basename(f) or 'crocoveen' in os.path.basename(f).lower()
     ]
 
