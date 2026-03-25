@@ -283,10 +283,173 @@ def parse_file(fpath):
         status_str = ' | '.join(parts) if parts else 'sin datos mensuales'
 
         print(f"  ✓ '{tname}' → {app_id}: sold={sold}/{tot} | {status_str}")
-        results.append({'id': app_id, 'sold': sold, 'rhythm': rhythm,
+        results.append({'id': app_id, 'sold': sold, 'tot': tot, 'rhythm': rhythm,
                         'delivery': delivery, 'constr': constr})
 
     return results
+
+# ── 5b. Hitos automáticos desde reglas ─────────────────────────
+import hashlib as _hl, json as _rjson
+
+RULES_FILE = os.path.join(FOLDER, 'reglas_hitos.json')
+AUTO_ID_MIN, AUTO_ID_MAX = 100000, 999999   # rango reservado para hitos automáticos
+
+def _stable_id(tid, tipo):
+    """ID numérico determinístico para un (torre, tipo) — siempre el mismo entre syncs."""
+    h = int(_hl.md5(f"{tid}_{tipo}".encode()).hexdigest(), 16)
+    return h % (AUTO_ID_MAX - AUTO_ID_MIN + 1) + AUTO_ID_MIN
+
+def _subtract_months(ym, n):
+    """Resta n meses a una cadena 'YYYY-MM'. Devuelve 'YYYY-MM'."""
+    y, m = int(ym[:4]), int(ym[5:7])
+    m -= n
+    while m <= 0:
+        m += 12; y -= 1
+    return f"{y:04d}-{m:02d}"
+
+def _add_months(ym, n):
+    """Suma n meses a 'YYYY-MM'."""
+    y, m = int(ym[:4]), int(ym[5:7])
+    m += n
+    while m > 12:
+        m -= 12; y += 1
+    return f"{y:04d}-{m:02d}"
+
+def _calc_pe_date(sold, tot, rhythm):
+    """Mes proyectado en que sold alcanza el 70% de tot, usando el ritmo de ventas."""
+    if not rhythm:
+        return None
+    tgt = tot * 0.7
+    if sold >= tgt:
+        return 'already'
+    c = sold
+    from datetime import date as _d
+    cur = _d.today().strftime('%Y-%m')
+    for ym in sorted(rhythm.keys()):
+        if ym <= cur:
+            continue
+        c += rhythm[ym]
+        if c >= tgt:
+            return ym
+    return None
+
+def _calc_entrega_date(constr, delivery):
+    """Primer mes de entrega: eEnd de constr, o primera clave de delivery, o end de constr."""
+    if constr:
+        if constr.get('eEnd'):
+            return constr['eEnd']
+        if constr.get('end'):
+            return constr['end']
+    if delivery:
+        return sorted(delivery.keys())[0]
+    return None
+
+def _read_existing_milestones(content):
+    """Lee todos los hitos actuales del HTML y los separa en manuales vs automáticos."""
+    manuales, auto = [], []
+    for m in re.finditer(
+        r"\{id:(\d+),tid:'([^']+)',type:'([^']*)',date:'([^']*)',desc:'([^']*)'\}",
+        content):
+        mid = int(m.group(1))
+        obj = {'id': mid, 'tid': m.group(2), 'type': m.group(3),
+               'date': m.group(4), 'desc': m.group(5)}
+        if AUTO_ID_MIN <= mid <= AUTO_ID_MAX:
+            auto.append(obj)
+        else:
+            manuales.append(obj)
+    return manuales, auto
+
+def _write_milestones(content, milestones):
+    """Reemplaza el bloque milestones:[...] en el HTML."""
+    lines = []
+    for m in milestones:
+        lines.append(
+            f"    {{id:{m['id']},tid:'{m['tid']}',type:'{m['type']}',date:'{m['date']}',desc:'{m['desc']}'}},")
+    new_block = "  milestones:[\n" + "\n".join(lines) + "\n  ],"
+    # Buscar el bloque completo con conteo de corchetes (evita DOTALL con corchetes anidados)
+    start = content.find('  milestones:[')
+    if start == -1:
+        print("  [WARN] Bloque 'milestones' no encontrado en el HTML")
+        return content
+    bracket_pos = content.index('[', start)
+    depth = 0
+    end = None
+    for i in range(bracket_pos, len(content)):
+        if content[i] == '[': depth += 1
+        elif content[i] == ']':
+            depth -= 1
+            if depth == 0:
+                end = i
+                break
+    if end is None:
+        print("  [WARN] No se encontró el cierre del bloque 'milestones'")
+        return content
+    # end+1 apunta al ']', avanzar a la ',' que sigue
+    tail = end + 1
+    while tail < len(content) and content[tail] in (' ', '\n', '\r', '\t'): tail += 1
+    if tail < len(content) and content[tail] == ',': tail += 1
+    return content[:start] + new_block + content[tail:]
+
+def update_milestones_from_rules(content, data):
+    """
+    Genera hitos automáticos a partir de reglas_hitos.json.
+    - IDs en rango [100000, 999999] → pueden actualizarse entre syncs.
+    - IDs fuera de ese rango → hitos manuales, nunca se tocan.
+    Los responsables (Supabase task_owners) usan 'm'+id, y como los IDs son
+    estables (basados en torre+tipo), las asignaciones nunca se pierden.
+    """
+    if not os.path.exists(RULES_FILE):
+        return content
+
+    with open(RULES_FILE, encoding='utf-8') as f:
+        rules = _rjson.load(f)
+
+    manuales, _ = _read_existing_milestones(content)
+    nuevos_auto = []
+    generados = 0
+
+    for rule in rules:
+        tipo      = rule.get('tipo', '')
+        referencia= rule.get('referencia', 'PE').upper()
+        meses     = int(rule.get('meses_antes', 0))
+        torres_ok = rule.get('torres', '*')
+        tmpl      = rule.get('descripcion_template', f'{tipo} {{torre}}')
+
+        for tid, d in sorted(data.items()):
+            # Filtro de torres
+            if torres_ok != '*' and isinstance(torres_ok, list) and tid not in torres_ok:
+                continue
+
+            # Calcular fecha de referencia
+            if referencia == 'PE':
+                ref_date = _calc_pe_date(d.get('sold', 0), d.get('tot', 0), d.get('rhythm', {}))
+                if not ref_date or ref_date == 'already':
+                    continue
+            elif referencia in ('ENTREGA', 'ENTREGAS'):
+                ref_date = _calc_entrega_date(d.get('constr'), d.get('delivery', {}))
+                if not ref_date:
+                    continue
+            else:
+                continue
+
+            target_date = _subtract_months(ref_date, meses)
+            stable      = _stable_id(tid, tipo)
+            desc        = tmpl.replace('{torre}', tid)
+
+            nuevos_auto.append({
+                'id':   stable,
+                'tid':  tid,
+                'type': tipo,
+                'date': target_date,
+                'desc': desc,
+            })
+            generados += 1
+
+    todos = manuales + sorted(nuevos_auto, key=lambda x: (x['date'], x['tid']))
+    print(f"\n📌 Hitos automáticos generados: {generados} (de {len(rules)} regla(s))")
+    print(f"   Hitos manuales conservados:  {len(manuales)}")
+    return _write_milestones(content, todos)
+
 
 # ── 5. Actualizar el HTML ───────────────────────────────────────
 def update_html(all_results):
@@ -427,6 +590,9 @@ def update_html(all_results):
         new_constr_lines.append(f"    '{tid}':" + "{" + f"start:'{c['start']}',end:'{c['end']}'{epart}" + "},")
 
     content = replace_js_block(content, 'constr', new_constr_lines)
+
+    # 5e. Hitos automáticos desde reglas_hitos.json
+    content = update_milestones_from_rules(content, data)
 
     with open(HTML, 'w', encoding='utf-8') as f:
         f.write(content)
@@ -699,8 +865,8 @@ def send_reminder(all_results):
     msg.attach(MIMEText(html, 'html', 'utf-8'))
     try:
         ctx = ssl.create_default_context()
-        with smtplib.SMTP('smtp.office365.com', 587) as s:
-            s.ehlo(); s.starttls(context=ctx); s.login(email_from, email_pass)
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=ctx) as s:
+            s.login(email_from, email_pass)
             s.sendmail(email_from, EMAIL_TO, msg.as_string())
         print(f"✓  Correo enviado a {len(EMAIL_TO)} personas.")
     except Exception as e:

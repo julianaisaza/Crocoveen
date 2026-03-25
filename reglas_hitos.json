@@ -1,0 +1,18 @@
+[
+  {
+    "nombre": "Licencia de Construcción",
+    "tipo": "Lic. Construcción",
+    "referencia": "PE",
+    "meses_antes": 3,
+    "torres": "*",
+    "descripcion_template": "Lic. Construcción {torre}"
+  },
+  {
+    "nombre": "RPH",
+    "tipo": "RPH",
+    "referencia": "entrega",
+    "meses_antes": 5,
+    "torres": "*",
+    "descripcion_template": "RPH {torre}"
+  }
+]
