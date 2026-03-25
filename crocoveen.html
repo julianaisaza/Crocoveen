@@ -232,9 +232,40 @@ table.ct .th-mo.cur{top:28px;background:#e8f5e9;color:#2e7d32;font-weight:700;bo
 .eq-name{flex:1;font-size:14px;font-weight:600;color:#333}
 .eq-remove{background:none;border:none;cursor:pointer;color:#ccc;font-size:20px;line-height:1;padding:0 4px;font-family:inherit;transition:color .15s}
 .eq-remove:hover{color:#e53935}
+
+/* ── LOGIN OVERLAY ─────────────────────────────────── */
+#login-overlay{position:fixed;inset:0;z-index:9999;background:rgba(20,50,20,.92);
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Segoe UI',Arial,sans-serif;backdrop-filter:blur(4px)}
+#login-box{background:#fff;border-radius:16px;padding:44px 40px 36px;
+  width:340px;box-shadow:0 8px 40px rgba(0,0,0,.35);text-align:center}
+#login-logo{font-size:36px;margin-bottom:6px}
+#login-title{font-size:20px;font-weight:700;color:#1b5e20;margin-bottom:4px}
+#login-sub{font-size:13px;color:#888;margin-bottom:28px}
+#login-pw{width:100%;box-sizing:border-box;padding:11px 14px;font-size:15px;
+  border:1.5px solid #ddd;border-radius:8px;outline:none;margin-bottom:14px;
+  transition:border .2s}
+#login-pw:focus{border-color:#2e7d32}
+#login-btn{width:100%;padding:12px;background:#1b5e20;color:#fff;border:none;
+  border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;
+  transition:background .2s}
+#login-btn:hover{background:#2e7d32}
+#login-err{color:#c62828;font-size:13px;margin-top:10px;min-height:18px}
 </style>
 </head>
 <body>
+<div id="login-overlay">
+  <div id="login-box">
+    <div id="login-logo">🌿</div>
+    <div id="login-title">Crocoveen</div>
+    <div id="login-sub">Tierra Grata & Co.</div>
+    <input id="login-pw" type="password" placeholder="Contraseña" autocomplete="current-password"
+           onkeydown="if(event.key==='Enter')doLogin()">
+    <button id="login-btn" onclick="doLogin()">Entrar</button>
+    <div id="login-err"></div>
+  </div>
+</div>
+
 <header class="hdr">
   <div style="display:flex;align-items:center">
     <div class="hdr-logo">TG</div>
@@ -1283,6 +1314,36 @@ function draw(){
   else if(S.view==='tareas') el.innerHTML=rTareas();
 }
 initSupabase();
+</script>
+
+<script>
+const PW_HASH='910430227a29285f3fc0b23d279be34a5efe722c6851fbee79b6405d522223ee';
+const SESSION_KEY='crocoveen_auth';
+async function sha256(str){
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function doLogin(){
+  const pw=document.getElementById('login-pw').value;
+  const h=await sha256(pw);
+  if(h===PW_HASH){
+    sessionStorage.setItem(SESSION_KEY,'1');
+    document.getElementById('login-overlay').style.display='none';
+  } else {
+    document.getElementById('login-err').textContent='Contraseña incorrecta';
+    document.getElementById('login-pw').value='';
+    document.getElementById('login-pw').focus();
+  }
+}
+// Comprobar si ya está autenticado en esta sesión
+(function(){
+  if(sessionStorage.getItem(SESSION_KEY)==='1'){
+    document.addEventListener('DOMContentLoaded',function(){
+      const ov=document.getElementById('login-overlay');
+      if(ov) ov.style.display='none';
+    });
+  }
+})();
 </script>
 </body>
 </html>
