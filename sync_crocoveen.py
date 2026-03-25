@@ -409,8 +409,8 @@ def _parse_periodo(texto):
     m = re.search(r'(\d+)\s+mes(?:es)?\s+antes\s+del?\s+(?:pe\b|punto)', s)
     if m: return 'PE', int(m.group(1))
 
-    # "X meses antes de(l|la) entrega"
-    m = re.search(r'(\d+)\s+mes(?:es)?\s+antes\s+de(?:l|la)?\s+entrega', s)
+    # "X meses antes de(l|la) entrega[s]"
+    m = re.search(r'(\d+)\s+mes(?:es)?\s+antes\s+de(?:l|la)?\s+entregas?', s)
     if m: return 'entrega', int(m.group(1))
 
     # "X meses antes del lanzamiento"
@@ -421,8 +421,8 @@ def _parse_periodo(texto):
     m = re.search(r'(\d+)\s+mes(?:es)?\s+despu[eé]s\s+del?\s+(?:pe\b|punto)', s)
     if m: return 'PE', -int(m.group(1))
 
-    # "X meses después de(l|la) entrega"
-    m = re.search(r'(\d+)\s+mes(?:es)?\s+despu[eé]s\s+de(?:l|la)?\s+entrega', s)
+    # "X meses después de(l|la) entrega[s]"
+    m = re.search(r'(\d+)\s+mes(?:es)?\s+despu[eé]s\s+de(?:l|la)?\s+entregas?', s)
     if m: return 'entrega', -int(m.group(1))
 
     # "al alcance del PE" / "alcance PE" / solo "PE"
@@ -460,13 +460,26 @@ def _read_actividades():
 
     ws = wb.active
     actividades = []
+    current_scope = 'etapa'  # default si no hay encabezado de sección
     for row in ws.iter_rows(min_row=2, values_only=True):
         if not row[0]: continue
         act    = str(row[0]).strip()
-        resp   = str(row[1]).strip() if len(row) > 1 and row[1] else ''
-        periodo= str(row[2]).strip() if len(row) > 2 and row[2] else ''
+        b_empty = not (len(row) > 1 and row[1])
+        c_empty = not (len(row) > 2 and row[2])
+        # Detectar encabezados de sección (solo col A, B y C vacías)
+        if b_empty and c_empty:
+            act_up = act.upper().replace(' ', '')
+            if 'PORPROYECTO' in act_up:
+                current_scope = 'proyecto'
+                continue
+            if 'PORETAPA' in act_up:
+                current_scope = 'etapa'
+                continue
+        resp   = str(row[1]).strip() if not b_empty else ''
+        periodo= str(row[2]).strip() if not c_empty else ''
         if act:
-            actividades.append({'nombre': act, 'responsable': resp, 'periodo': periodo})
+            actividades.append({'nombre': act, 'responsable': resp,
+                                'periodo': periodo, 'scope': current_scope})
     return actividades
 
 
@@ -521,47 +534,97 @@ def update_milestones_from_excel(content, data):
     owner_updates = {}
     sin_fecha = 0
 
+    # Agrupar torres por proyecto para actividades POR PROYECTO
+    towers_list = _extract_towers()
+    tid_to_proj = {t['id']: (t.get('proj') or t['id']) for t in towers_list}
+    proj_tids = {}
+    for tid in sorted(data.keys()):
+        pid = tid_to_proj.get(tid, tid)
+        if pid not in proj_tids:
+            proj_tids[pid] = []
+        proj_tids[pid].append(tid)
+
+    def _proj_ref_date(pid, referencia):
+        """Fecha de referencia agregada para el proyecto: mínima entre todas sus etapas."""
+        dates = []
+        for t in proj_tids.get(pid, []):
+            d = data[t]
+            if referencia == 'PE':
+                dt = _calc_pe_date(d.get('sold', 0), d.get('tot', 0), d.get('rhythm', {}))
+                if dt and dt != 'already': dates.append(dt)
+            elif referencia == 'entrega':
+                dt = _calc_entrega_date(d.get('constr'), d.get('delivery', {}))
+                if dt: dates.append(dt)
+            elif referencia == 'lanzamiento':
+                dt = d.get('lanzamiento')
+                if dt: dates.append(dt)
+        return min(dates) if dates else None
+
     for act in actividades:
         referencia, meses_antes = _parse_periodo(act['periodo'])
-        tipo = _js_safe(act['nombre'])
+        tipo  = _js_safe(act['nombre'])
+        scope = act.get('scope', 'etapa')
 
-        for tid, d in sorted(data.items()):
-            # Calcular fecha de referencia
-            if referencia == 'PE':
-                ref_date = _calc_pe_date(d.get('sold', 0), d.get('tot', 0), d.get('rhythm', {}))
-                if not ref_date or ref_date == 'already': continue
-            elif referencia == 'entrega':
-                ref_date = _calc_entrega_date(d.get('constr'), d.get('delivery', {}))
-                if not ref_date: continue
-            elif referencia == 'lanzamiento':
-                ref_date = d.get('lanzamiento')
-                if not ref_date: continue
-            else:
-                # Sin periodo → hito sin fecha (se crea igual para que aparezca en tareas)
-                ref_date = None
+        if scope == 'proyecto':
+            # Un hito por proyecto (no por torre)
+            for pid, p_tids in sorted(proj_tids.items()):
+                ref_date = _proj_ref_date(pid, referencia) if referencia else None
+                if ref_date is None:
+                    sin_fecha += 1
+                    continue
+                if meses_antes > 0:
+                    target_date = _subtract_months(ref_date, meses_antes)
+                elif meses_antes < 0:
+                    target_date = _add_months(ref_date, abs(meses_antes))
+                else:
+                    target_date = ref_date
+                stable  = _stable_id(f'~{pid}', tipo)  # ~ separa IDs de proyecto vs torre
+                rep_tid = p_tids[0]
+                desc    = _js_safe(f"{act['nombre']} · {pid}")
+                nuevos_auto.append({
+                    'id': stable, 'tid': rep_tid,
+                    'type': tipo[:35],
+                    'date': target_date,
+                    'desc': desc,
+                })
+                if act['responsable']:
+                    owner_updates['m' + str(stable)] = _js_safe(act['responsable'])
 
-            if ref_date is None:
-                # Sin periodo → no crear hito hasta que se defina el periodo en el Excel
-                sin_fecha += 1
-                continue
-            elif meses_antes > 0:
-                target_date = _subtract_months(ref_date, meses_antes)
-            elif meses_antes < 0:
-                target_date = _add_months(ref_date, abs(meses_antes))
-            else:
-                target_date = ref_date
+        else:
+            # scope == 'etapa': un hito por torre (comportamiento original)
+            for tid, d in sorted(data.items()):
+                if referencia == 'PE':
+                    ref_date = _calc_pe_date(d.get('sold', 0), d.get('tot', 0), d.get('rhythm', {}))
+                    if not ref_date or ref_date == 'already': continue
+                elif referencia == 'entrega':
+                    ref_date = _calc_entrega_date(d.get('constr'), d.get('delivery', {}))
+                    if not ref_date: continue
+                elif referencia == 'lanzamiento':
+                    ref_date = d.get('lanzamiento')
+                    if not ref_date: continue
+                else:
+                    ref_date = None
 
-            stable = _stable_id(tid, tipo)
-            desc   = _js_safe(f"{act['nombre']} · {tid}")
+                if ref_date is None:
+                    sin_fecha += 1
+                    continue
+                elif meses_antes > 0:
+                    target_date = _subtract_months(ref_date, meses_antes)
+                elif meses_antes < 0:
+                    target_date = _add_months(ref_date, abs(meses_antes))
+                else:
+                    target_date = ref_date
 
-            nuevos_auto.append({
-                'id': stable, 'tid': tid,
-                'type': tipo[:35],
-                'date': target_date,
-                'desc': desc,
-            })
-            if act['responsable']:
-                owner_updates['m' + str(stable)] = _js_safe(act['responsable'])
+                stable = _stable_id(tid, tipo)
+                desc   = _js_safe(f"{act['nombre']} · {tid}")
+                nuevos_auto.append({
+                    'id': stable, 'tid': tid,
+                    'type': tipo[:35],
+                    'date': target_date,
+                    'desc': desc,
+                })
+                if act['responsable']:
+                    owner_updates['m' + str(stable)] = _js_safe(act['responsable'])
 
     todos = manuales + sorted(nuevos_auto, key=lambda x: (x['date'] or 'z', x['tid']))
     _upsert_owners(owner_updates)
