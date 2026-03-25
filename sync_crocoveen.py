@@ -282,9 +282,12 @@ def parse_file(fpath):
         if constr:   parts.append(f"constr={constr['start']}→{constr['end']}")
         status_str = ' | '.join(parts) if parts else 'sin datos mensuales'
 
+        # Fecha de lanzamiento = primer mes con ritmo de ventas
+        lanzamiento = min(rhythm.keys()) if rhythm else None
+
         print(f"  ✓ '{tname}' → {app_id}: sold={sold}/{tot} | {status_str}")
         results.append({'id': app_id, 'sold': sold, 'tot': tot, 'rhythm': rhythm,
-                        'delivery': delivery, 'constr': constr})
+                        'delivery': delivery, 'constr': constr, 'lanzamiento': lanzamiento})
 
     return results
 
@@ -390,64 +393,215 @@ def _write_milestones(content, milestones):
     if tail < len(content) and content[tail] == ',': tail += 1
     return content[:start] + new_block + content[tail:]
 
-def update_milestones_from_rules(content, data):
+def _parse_periodo(texto):
     """
-    Genera hitos automáticos a partir de reglas_hitos.json.
-    - IDs en rango [100000, 999999] → pueden actualizarse entre syncs.
-    - IDs fuera de ese rango → hitos manuales, nunca se tocan.
-    Los responsables (Supabase task_owners) usan 'm'+id, y como los IDs son
-    estables (basados en torre+tipo), las asignaciones nunca se pierden.
+    Parsea el texto de 'Periodo de referencia'.
+    Devuelve (referencia, meses_antes):
+      referencia  : 'PE' | 'entrega' | 'lanzamiento' | None
+      meses_antes : int positivo = antes, 0 = mismo mes, negativo = después
     """
-    if not os.path.exists(RULES_FILE):
-        return content
+    if not texto or not str(texto).strip():
+        return None, 0
+    s = str(texto).strip().lower()
 
-    with open(RULES_FILE, encoding='utf-8') as f:
-        rules = _rjson.load(f)
+    # "X meses antes del PE / de PE / del punto de equilibrio"
+    m = re.search(r'(\d+)\s+mes(?:es)?\s+antes\s+del?\s+(?:pe\b|punto)', s)
+    if m: return 'PE', int(m.group(1))
+
+    # "X meses antes de(l|la) entrega"
+    m = re.search(r'(\d+)\s+mes(?:es)?\s+antes\s+de(?:l|la)?\s+entrega', s)
+    if m: return 'entrega', int(m.group(1))
+
+    # "X meses antes del lanzamiento"
+    m = re.search(r'(\d+)\s+mes(?:es)?\s+antes\s+del?\s+lanzamiento', s)
+    if m: return 'lanzamiento', int(m.group(1))
+
+    # "X meses después del PE"
+    m = re.search(r'(\d+)\s+mes(?:es)?\s+despu[eé]s\s+del?\s+(?:pe\b|punto)', s)
+    if m: return 'PE', -int(m.group(1))
+
+    # "X meses después de(l|la) entrega"
+    m = re.search(r'(\d+)\s+mes(?:es)?\s+despu[eé]s\s+de(?:l|la)?\s+entrega', s)
+    if m: return 'entrega', -int(m.group(1))
+
+    # "al alcance del PE" / "alcance PE" / solo "PE"
+    if re.search(r'alcance.{0,10}pe\b|^pe$|^punto de equilibrio$', s): return 'PE', 0
+
+    # "lanzamiento de ventas" / "lanzamiento"
+    if 'lanzamiento' in s: return 'lanzamiento', 0
+
+    # "al momento de la entrega" / solo "entrega"
+    if 'entrega' in s: return 'entrega', 0
+
+    return None, 0
+
+
+def _read_actividades():
+    """Lee 'Actividades Proyectos.xlsx' y devuelve lista de dicts."""
+    for fname in ['Actividades Proyectos.xlsx', 'actividades proyectos.xlsx',
+                  'actividades_proyectos.xlsx', 'Actividades_Proyectos.xlsx']:
+        fpath = os.path.join(FOLDER, fname)
+        if os.path.exists(fpath):
+            break
+    else:
+        return []
+
+    import openpyxl as _opxl
+    try:
+        wb = _opxl.load_workbook(fpath, data_only=True)
+    except Exception as e:
+        print(f"  [ERROR] No se pudo abrir Actividades Proyectos.xlsx: {e}")
+        return []
+
+    ws = wb.active
+    actividades = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if not row[0]: continue
+        act    = str(row[0]).strip()
+        resp   = str(row[1]).strip() if len(row) > 1 and row[1] else ''
+        periodo= str(row[2]).strip() if len(row) > 2 and row[2] else ''
+        if act:
+            actividades.append({'nombre': act, 'responsable': resp, 'periodo': periodo})
+    return actividades
+
+
+def _upsert_owners(owner_updates):
+    """Escribe/actualiza responsables en Supabase (task_owners) sin tocar otros campos."""
+    if not owner_updates:
+        return
+    import json as _jj
+    from urllib.request import Request as _R2, urlopen as _U2
+    url  = f'{SB_URL_E}/rest/v1/task_owners'
+    hdrs = {
+        'apikey': SB_KEY_E, 'Authorization': f'Bearer {SB_KEY_E}',
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates,return=minimal',
+    }
+    records = [{'task_id': tid, 'owner': owner} for tid, owner in owner_updates.items()]
+    batch_size = 50
+    total_ok = 0
+    for i in range(0, len(records), batch_size):
+        batch = records[i:i+batch_size]
+        data  = _jj.dumps(batch).encode()
+        req   = _R2(url, data=data, headers=hdrs, method='POST')
+        try:
+            with _U2(req, timeout=10): pass
+            total_ok += len(batch)
+        except Exception as e:
+            print(f"  ⚠️  Supabase owners: {e}")
+    if total_ok:
+        print(f"  ✅ {total_ok} responsables sincronizados en Supabase")
+
+
+def _js_safe(s):
+    """Escapa comillas simples para uso dentro de strings JS."""
+    return str(s).replace("'", "\\'").replace('\n', ' ')
+
+
+def update_milestones_from_excel(content, data):
+    """
+    Lee 'Actividades Proyectos.xlsx' y genera un hito por actividad×torre.
+    - IDs en [100000, 999999]: se regeneran en cada sync (nunca manuales).
+    - Hitos manuales (id < 100000) se conservan siempre.
+    - Responsables se escriben en Supabase automáticamente.
+    - Si no existe el Excel, cae al JSON reglas_hitos.json como fallback.
+    """
+    actividades = _read_actividades()
+    if not actividades:
+        # Fallback al JSON anterior
+        return _update_milestones_json_fallback(content, data)
 
     manuales, _ = _read_existing_milestones(content)
     nuevos_auto = []
-    generados = 0
+    owner_updates = {}
+    sin_fecha = 0
 
+    for act in actividades:
+        referencia, meses_antes = _parse_periodo(act['periodo'])
+        tipo = _js_safe(act['nombre'])
+
+        for tid, d in sorted(data.items()):
+            # Calcular fecha de referencia
+            if referencia == 'PE':
+                ref_date = _calc_pe_date(d.get('sold', 0), d.get('tot', 0), d.get('rhythm', {}))
+                if not ref_date or ref_date == 'already': continue
+            elif referencia == 'entrega':
+                ref_date = _calc_entrega_date(d.get('constr'), d.get('delivery', {}))
+                if not ref_date: continue
+            elif referencia == 'lanzamiento':
+                ref_date = d.get('lanzamiento')
+                if not ref_date: continue
+            else:
+                # Sin periodo → hito sin fecha (se crea igual para que aparezca en tareas)
+                ref_date = None
+
+            if ref_date is None:
+                # Sin periodo → no crear hito hasta que se defina el periodo en el Excel
+                sin_fecha += 1
+                continue
+            elif meses_antes > 0:
+                target_date = _subtract_months(ref_date, meses_antes)
+            elif meses_antes < 0:
+                target_date = _add_months(ref_date, abs(meses_antes))
+            else:
+                target_date = ref_date
+
+            stable = _stable_id(tid, tipo)
+            desc   = _js_safe(f"{act['nombre']} · {tid}")
+
+            nuevos_auto.append({
+                'id': stable, 'tid': tid,
+                'type': tipo[:35],
+                'date': target_date,
+                'desc': desc,
+            })
+            if act['responsable']:
+                owner_updates['m' + str(stable)] = _js_safe(act['responsable'])
+
+    todos = manuales + sorted(nuevos_auto, key=lambda x: (x['date'] or 'z', x['tid']))
+    _upsert_owners(owner_updates)
+
+    actos_con_periodo = len(actividades) - sum(1 for a in actividades if not _parse_periodo(a['periodo'])[0])
+    print(f"\n📌 Hitos generados desde Actividades Proyectos.xlsx:")
+    print(f"   Hitos con fecha:  {len(nuevos_auto)}  "
+          f"({actos_con_periodo} actividades × torres con fecha calculable)")
+    print(f"   Actividades sin periodo aún: {sin_fecha // max(len(data),1)} "
+          f"(se agregarán cuando completes la columna C)")
+    print(f"   Manuales conservados: {len(manuales)}")
+    return _write_milestones(content, todos)
+
+
+def _update_milestones_json_fallback(content, data):
+    """Fallback: usa reglas_hitos.json si no hay Excel."""
+    if not os.path.exists(RULES_FILE):
+        return content
+    with open(RULES_FILE, encoding='utf-8') as f:
+        rules = _rjson.load(f)
+    manuales, _ = _read_existing_milestones(content)
+    nuevos_auto = []
     for rule in rules:
         tipo      = rule.get('tipo', '')
         referencia= rule.get('referencia', 'PE').upper()
         meses     = int(rule.get('meses_antes', 0))
         torres_ok = rule.get('torres', '*')
         tmpl      = rule.get('descripcion_template', f'{tipo} {{torre}}')
-
         for tid, d in sorted(data.items()):
-            # Filtro de torres
             if torres_ok != '*' and isinstance(torres_ok, list) and tid not in torres_ok:
                 continue
-
-            # Calcular fecha de referencia
             if referencia == 'PE':
                 ref_date = _calc_pe_date(d.get('sold', 0), d.get('tot', 0), d.get('rhythm', {}))
-                if not ref_date or ref_date == 'already':
-                    continue
+                if not ref_date or ref_date == 'already': continue
             elif referencia in ('ENTREGA', 'ENTREGAS'):
                 ref_date = _calc_entrega_date(d.get('constr'), d.get('delivery', {}))
-                if not ref_date:
-                    continue
+                if not ref_date: continue
             else:
                 continue
-
             target_date = _subtract_months(ref_date, meses)
-            stable      = _stable_id(tid, tipo)
-            desc        = tmpl.replace('{torre}', tid)
-
-            nuevos_auto.append({
-                'id':   stable,
-                'tid':  tid,
-                'type': tipo,
-                'date': target_date,
-                'desc': desc,
-            })
-            generados += 1
-
+            stable = _stable_id(tid, tipo)
+            nuevos_auto.append({'id': stable, 'tid': tid, 'type': tipo,
+                                'date': target_date, 'desc': tmpl.replace('{torre}', tid)})
     todos = manuales + sorted(nuevos_auto, key=lambda x: (x['date'], x['tid']))
-    print(f"\n📌 Hitos automáticos generados: {generados} (de {len(rules)} regla(s))")
-    print(f"   Hitos manuales conservados:  {len(manuales)}")
+    print(f"\n📌 Hitos (JSON fallback): {len(nuevos_auto)} generados, {len(manuales)} manuales")
     return _write_milestones(content, todos)
 
 
@@ -591,8 +745,8 @@ def update_html(all_results):
 
     content = replace_js_block(content, 'constr', new_constr_lines)
 
-    # 5e. Hitos automáticos desde reglas_hitos.json
-    content = update_milestones_from_rules(content, data)
+    # 5e. Hitos automáticos desde Actividades Proyectos.xlsx (o JSON como fallback)
+    content = update_milestones_from_excel(content, data)
 
     with open(HTML, 'w', encoding='utf-8') as f:
         f.write(content)
