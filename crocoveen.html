@@ -7,8 +7,8 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f0;color:#333;min-height:100vh}
-.hdr{background:#1b5e20;color:#fff;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 8px rgba(0,0,0,.25)}
-.hdr-logo{width:40px;height:40px;background:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;color:#1b5e20;flex-shrink:0;margin-right:12px}
+.hdr{background:#0D3D52;color:#fff;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.hdr-logo{width:40px;height:40px;background:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;color:#0D3D52;flex-shrink:0;margin-right:12px}
 .hdr-title{font-weight:700;font-size:17px}
 .hdr-sub{font-size:11px;color:#a5d6a7;margin-top:2px}
 .hdr-right{font-size:11px;color:#81c784;text-align:right;line-height:1.6}
@@ -234,22 +234,22 @@ table.ct .th-mo.cur{top:28px;background:#e8f5e9;color:#2e7d32;font-weight:700;bo
 .eq-remove:hover{color:#e53935}
 
 /* ── LOGIN OVERLAY ─────────────────────────────────── */
-#login-overlay{position:fixed;inset:0;z-index:9999;background:rgba(20,50,20,.92);
+#login-overlay{position:fixed;inset:0;z-index:9999;background:rgba(13,61,82,.92);
   display:flex;align-items:center;justify-content:center;
   font-family:'Segoe UI',Arial,sans-serif;backdrop-filter:blur(4px)}
 #login-box{background:#fff;border-radius:16px;padding:44px 40px 36px;
   width:340px;box-shadow:0 8px 40px rgba(0,0,0,.35);text-align:center}
 #login-logo{font-size:36px;margin-bottom:6px}
-#login-title{font-size:20px;font-weight:700;color:#1b5e20;margin-bottom:4px}
+#login-title{font-size:20px;font-weight:700;color:#0D3D52;margin-bottom:4px}
 #login-sub{font-size:13px;color:#888;margin-bottom:28px}
 #login-pw{width:100%;box-sizing:border-box;padding:11px 14px;font-size:15px;
   border:1.5px solid #ddd;border-radius:8px;outline:none;margin-bottom:14px;
   transition:border .2s}
-#login-pw:focus{border-color:#2e7d32}
-#login-btn{width:100%;padding:12px;background:#1b5e20;color:#fff;border:none;
+#login-pw:focus{border-color:#007060}
+#login-btn{width:100%;padding:12px;background:#0D3D52;color:#fff;border:none;
   border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;
   transition:background .2s}
-#login-btn:hover{background:#2e7d32}
+#login-btn:hover{background:#007060}
 #login-err{color:#c62828;font-size:13px;margin-top:10px;min-height:18px}
 </style>
 </head>
@@ -274,7 +274,6 @@ table.ct .th-mo.cur{top:28px;background:#e8f5e9;color:#2e7d32;font-weight:700;bo
       <div class="hdr-sub">Cronograma de Construcción, Ventas y Entregas — Crocoveen</div>
     </div>
   </div>
-  <div class="hdr-right">Prototipo funcional<br><span style="color:#a5d6a7" id="hdr-date">Marzo 2026</span></div>
 </header>
 <nav class="nav">
   <div class="ntab active" id="tab-dashboard" onclick="go('dashboard')">📊 Dashboard</div>
