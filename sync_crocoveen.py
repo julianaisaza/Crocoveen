@@ -605,6 +605,32 @@ def _update_milestones_json_fallback(content, data):
     return _write_milestones(content, todos)
 
 
+def _inject_password_hash(content):
+    """Lee app_password de config.json, calcula su SHA-256 e inyecta en el HTML."""
+    import hashlib as _hl2
+    cfg_path = os.path.join(FOLDER, 'config.json')
+    if not os.path.exists(cfg_path):
+        return content
+    try:
+        with open(cfg_path, encoding='utf-8') as f:
+            cfg = _json.load(f)
+        pw = cfg.get('app_password', '')
+        if not pw:
+            return content
+        h = _hl2.sha256(pw.encode()).hexdigest()
+        # Reemplaza la constante PW_HASH en el HTML
+        pattern = r"const PW_HASH='[^']*'"
+        if not re.search(pattern, content):
+            print("  [WARN] PW_HASH no encontrado — asegúrate de tener la pantalla de login en el HTML")
+            return content
+        new_content = re.sub(pattern, f"const PW_HASH='{h}'", content)
+        print(f"  🔐 Contraseña de acceso sincronizada")
+        return new_content
+    except Exception as e:
+        print(f"  ⚠️  Error leyendo config para login: {e}")
+        return content
+
+
 # ── 5. Actualizar el HTML ───────────────────────────────────────
 def update_html(all_results):
     if not os.path.exists(HTML):
@@ -747,6 +773,9 @@ def update_html(all_results):
 
     # 5e. Hitos automáticos desde Actividades Proyectos.xlsx (o JSON como fallback)
     content = update_milestones_from_excel(content, data)
+
+    # 5f. Inyectar hash de contraseña de acceso
+    content = _inject_password_hash(content)
 
     with open(HTML, 'w', encoding='utf-8') as f:
         f.write(content)
