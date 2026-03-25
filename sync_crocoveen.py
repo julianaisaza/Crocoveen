@@ -973,7 +973,7 @@ def send_reminder(all_results):
 
     def _owner_badge(tid):
         o = owners.get(tid,'')
-        if o: return f'<span style="background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:10px;font-size:11px">{o}</span>'
+        if o: return f'<span style="background:#e6eef2;color:#0D3D52;padding:2px 8px;border-radius:10px;font-size:11px">{o}</span>'
         return '<span style="color:#ccc;font-size:11px">—</span>'
 
     def _row3(t):
@@ -993,7 +993,7 @@ def send_reminder(all_results):
     pend_rows = ''
     for proj, ts in sorted(by_proj.items()):
         pend_rows += (f'<tr><td colspan="3" style="padding:8px 12px 3px;background:#f9f9f9;'
-                      f'font-weight:700;color:#2e7d32;font-size:11px;text-transform:uppercase">{proj}</td></tr>')
+                      f'font-weight:700;color:#007060;font-size:11px;text-transform:uppercase">{proj}</td></tr>')
         for t in ts[:15]: pend_rows += _row3(t)
 
     up_rows   = ''.join(_row3(t) for t in upcoming) or '<tr><td colspan="3" style="padding:12px;color:#aaa;text-align:center">Ninguna tarea vence esta semana 🎉</td></tr>'
@@ -1009,14 +1009,14 @@ def send_reminder(all_results):
     html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background:#f5f5f5;font-family:Arial,sans-serif">
 <div style="max-width:640px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08)">
-  <div style="background:#1b5e20;padding:28px 32px">
+  <div style="background:#0D3D52;padding:28px 32px">
     <div style="font-size:22px;font-weight:700;color:#fff">🌿 Crocoveen</div>
-    <div style="color:#a5d6a7;font-size:13px;margin-top:4px">Resumen semanal · {fecha_str}</div>
+    <div style="color:#a8cdd8;font-size:13px;margin-top:4px">Resumen semanal · {fecha_str}</div>
   </div>
-  <div style="display:flex;padding:18px 32px;gap:12px;background:#f9fbe7;border-bottom:1px solid #e8f5e9">
-    <div style="flex:1;text-align:center"><div style="font-size:26px;font-weight:700;color:#1b5e20">{len(pending)}</div><div style="font-size:11px;color:#666">Pendientes</div></div>
+  <div style="display:flex;padding:18px 32px;gap:12px;background:#eaf2f5;border-bottom:1px solid #c8dde5">
+    <div style="flex:1;text-align:center"><div style="font-size:26px;font-weight:700;color:#0D3D52">{len(pending)}</div><div style="font-size:11px;color:#666">Pendientes</div></div>
     <div style="flex:1;text-align:center"><div style="font-size:26px;font-weight:700;color:#e65100">{len(upcoming)}</div><div style="font-size:11px;color:#666">Vencen esta semana</div></div>
-    <div style="flex:1;text-align:center"><div style="font-size:26px;font-weight:700;color:#388e3c">{len(comp_week)}</div><div style="font-size:11px;color:#666">Completadas (7 días)</div></div>
+    <div style="flex:1;text-align:center"><div style="font-size:26px;font-weight:700;color:#007060">{len(comp_week)}</div><div style="font-size:11px;color:#666">Completadas (7 días)</div></div>
   </div>
   <div style="padding:22px 32px 0">
     <div style="font-size:14px;font-weight:700;color:#333;margin-bottom:10px">⚡ Vencen esta semana</div>
@@ -1035,12 +1035,12 @@ def send_reminder(all_results):
   <div style="padding:22px 32px">
     <div style="font-size:14px;font-weight:700;color:#333;margin-bottom:10px">✅ Completadas esta semana</div>
     <table style="width:100%;border-collapse:collapse">
-      <tr style="background:#f1f8e9"><th {TH}>TAREA</th><th {TH}>FECHA</th></tr>
+      <tr style="background:#eaf2f5"><th {TH}>TAREA</th><th {TH}>FECHA</th></tr>
       {comp_rows}
     </table>
   </div>
   <div style="padding:0 32px 28px;text-align:center">
-    <a href="https://julianaisaza.github.io/Crocoveen" style="display:inline-block;background:#1b5e20;color:#fff;text-decoration:none;padding:11px 26px;border-radius:8px;font-weight:600;font-size:13px">Ver Crocoveen →</a>
+    <a href="https://julianaisaza.github.io/Crocoveen" style="display:inline-block;background:#0D3D52;color:#fff;text-decoration:none;padding:11px 26px;border-radius:8px;font-weight:600;font-size:13px">Ver Crocoveen →</a>
   </div>
   <div style="background:#f5f5f5;padding:14px 32px;text-align:center">
     <div style="font-size:11px;color:#aaa">Correo automático semanal · Tierra Grata & Co.</div>
