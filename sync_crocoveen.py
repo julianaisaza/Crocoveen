@@ -283,8 +283,11 @@ def parse_file(fpath):
         if constr:   parts.append(f"constr={constr['start']}→{constr['end']}")
         status_str = ' | '.join(parts) if parts else 'sin datos mensuales'
 
-        # Fecha de lanzamiento = primer mes con ritmo de ventas
-        lanzamiento = min(rhythm.keys()) if rhythm else None
+        # Fecha de lanzamiento = primer mes con ritmo de ventas proyectado,
+        # SOLO si el proyecto aún no ha iniciado ventas (sold == 0).
+        # Si ya tiene unidades vendidas, el lanzamiento ya ocurrió: no crear
+        # hitos de lanzamiento con fechas falsas basadas en remanentes de venta.
+        lanzamiento = min(rhythm.keys()) if rhythm and sold == 0 else None
 
         print(f"  ✓ '{tname}' → {app_id}: sold={sold}/{tot} | {status_str}")
         results.append({'id': app_id, 'sold': sold, 'tot': tot, 'rhythm': rhythm,
