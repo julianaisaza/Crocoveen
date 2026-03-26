@@ -1323,8 +1323,11 @@ function badgeCls(type){
 
 function buildTasks(){
   const tasks=[];
-  // 1. Hitos registrados manualmente (todos)
+  const done=getDone();
+  // 1. Hitos registrados — solo los futuros o los que el usuario marcó como completados
+  // (si un hito ya pasó y nadie lo marcó, se asume cumplido y no genera tarea pendiente)
   for(const m of S.milestones){
+    if(m.date && m.date < S.currentDate && !done.has('m'+m.id)) continue;
     const t=S.towers.find(x=>x.id===m.tid);
     tasks.push({id:'m'+m.id,tid:m.tid,proj:t?t.proj:'',name:m.desc||m.type,type:m.type,date:m.date,tower:t?t.name:m.tid});
   }
