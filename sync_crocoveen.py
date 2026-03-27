@@ -61,6 +61,9 @@ TOWER_MAP = {
     # Summit Grand
     ('summitgrand','t1'): 'SG-T1', ('summitgrand','t2'): 'SG-T2', ('summitgrand','t3'): 'SG-T3',
     ('grand','t1'): 'SG-T1', ('grand','t2'): 'SG-T2', ('grand','t3'): 'SG-T3',
+    # Lúmina (keyword 'lmina' = norm de 'Lúmina'; 'bosques' = nombre de hoja)
+    ('lmina','t1'): 'Lu-T1', ('lmina','t2'): 'Lu-T2', ('lmina','t3'): 'Lu-T3',
+    ('bosques','t1'): 'Lu-T1', ('bosques','t2'): 'Lu-T2', ('bosques','t3'): 'Lu-T3',
 }
 
 NOT_TOWER = {'total','ventas','rph','torre','locales','condiciones',
@@ -144,7 +147,8 @@ def parse_file(fpath):
     # Keywords para lookup: del nombre de archivo y del nombre de hoja
     file_keys = []
     for kw in ['country','zitizen','primavera','gica','bosketo',
-               'camino','ambarte','bella','uau5','summitgrand','grand','summit']:
+               'camino','ambarte','bella','uau5','summitgrand','grand','summit',
+               'lmina','bosques']:
         if kw in fnorm or kw in sheet_key:
             file_keys.append(kw)
     # Summit Grand antes de Summit para evitar falsos positivos
