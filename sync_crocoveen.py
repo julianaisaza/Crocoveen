@@ -849,7 +849,15 @@ def update_html(all_results):
     # 5e. Hitos automáticos desde Actividades Proyectos.xlsx (o JSON como fallback)
     content = update_milestones_from_excel(content, data)
 
-    # 5f. Inyectar hash de contraseña de acceso
+    # 5f. Actualizar currentDate al mes actual automáticamente
+    from datetime import date as _today_d
+    cur_month = _today_d.today().strftime('%Y-%m')
+    content_new = re.sub(r"currentDate:'[0-9]{4}-[0-9]{2}'", f"currentDate:'{cur_month}'", content)
+    if content_new != content:
+        print(f"  📅 currentDate actualizado a {cur_month}")
+    content = content_new
+
+    # 5g. Inyectar hash de contraseña de acceso
     content = _inject_password_hash(content)
 
     with open(HTML, 'w', encoding='utf-8') as f:
