@@ -128,6 +128,8 @@ table.ct .th-mo.cur{top:28px;background:#e8f5e9;color:#2e7d32;font-weight:700;bo
 .c-del:hover{background:#f06292}
 .c-hit{background:#bbdefb;color:#0d47a1;font-size:9px;font-weight:700;cursor:pointer}
 .c-hit:hover{background:#90caf9}
+.cv-cell.sel{outline:2px solid #0D3D52 !important;background:rgba(13,61,82,0.13) !important;position:relative;z-index:1}
+.croco-statsbar{display:none;position:sticky;bottom:0;left:0;right:0;background:#0D3D52;color:#fff;padding:6px 16px;font-size:12px;font-weight:600;border-top:2px solid #07253a;user-select:none;border-radius:0 0 12px 12px}
 .c-hit-add{color:#90caf9;cursor:pointer;font-size:10px}
 .c-hit-add:hover{background:#e3f2fd}
 .c-sep{background:#f9fbe7;height:4px;padding:0}
@@ -935,7 +937,7 @@ function rCroco(){
     +Object.entries(yg).map(([y,n])=>`<th class="th-yr" colspan="${n}">${y}</th>`).join('');
   const thMo=vis.map(m=>`<th class="th-mo${m===S.currentDate?' cur':''}">${MN[+m.split('-')[1]-1]}</th>`).join('');
 
-  let rows='';
+  let rows='',ri=0;
   for(const t of shown){
     const col=PC[t.proj]||'#2e7d32';
     const _c=S.constr[t.id];
@@ -957,15 +959,18 @@ function rCroco(){
       +`</td>`;
 
     // ROW 1: Ritmo ventas — read-only
+    const _ri1=ri++;
     rows+=`<tr><td class="lbl lbl-sales">↗ Ritmo ventas</td>`
       +infPanel
-      +vis.map(m=>{const v=rhm[m];return `<td class="${v?'c-sales':''}">${v||''}</td>`;}).join('')+`</tr>`;
+      +vis.map((m,ci)=>{const v=rhm[m];return `<td class="cv-cell${v?' c-sales':''}" data-ri="${_ri1}" data-ci="${ci}" data-v="${v||0}">${v||''}</td>`;}).join('')+`</tr>`;
 
     // ROW 2: Ventas acumuladas (número)
+    const _ri2=ri++;
     rows+=`<tr><td class="lbl lbl-acum">📊 Vtas acum. (N°)</td>`
-      +vis.map(m=>`<td class="c-acum">${cumSold(t,m)}</td>`).join('')+`</tr>`;
+      +vis.map((m,ci)=>{const cs=cumSold(t,m);return `<td class="cv-cell c-acum" data-ri="${_ri2}" data-ci="${ci}" data-v="${cs}">${cs}</td>`;}).join('')+`</tr>`;
 
     // ROW 3: % Ventas acum.
+    const _ri3=ri++;
     rows+=`<tr><td class="lbl lbl-pct">% Ventas acum.</td>`
       +vis.map((m,i)=>{
         const c=cumSold(t,m),p=c/t.tot;
@@ -973,22 +978,25 @@ function rCroco(){
         const isFirst=p>=0.7&&pp<0.7,cross60=p>=0.6&&p<0.7&&pp<0.6,past=p>=0.7&&!isFirst;
         const cls=isFirst?'c-pe':cross60?'c-p60':past?'c-p70':'';
         const tip=isFirst?' title="🚦 Punto de equilibrio alcanzado"':'';
-        return `<td class="${cls}"${tip}>${(p*100).toFixed(0)}%</td>`;
+        return `<td class="cv-cell ${cls}" data-ri="${_ri3}" data-ci="${i}" data-v="${(p*100).toFixed(0)}"${tip}>${(p*100).toFixed(0)}%</td>`;
       }).join('')+`</tr>`;
 
     // ROW 4: Construcción (C = obra, E = lista para entrega)
+    const _ri4=ri++;
     rows+=`<tr><td class="lbl lbl-con">🏗 Construcción</td>`
-      +vis.map(m=>{
-        if(cM.has(m)) return `<td class="c-con">C</td>`;
-        if(eM.has(m)) return `<td class="c-econ">E</td>`;
-        return `<td></td>`;
+      +vis.map((m,ci)=>{
+        if(cM.has(m)) return `<td class="cv-cell c-con" data-ri="${_ri4}" data-ci="${ci}" data-v="1">C</td>`;
+        if(eM.has(m)) return `<td class="cv-cell c-econ" data-ri="${_ri4}" data-ci="${ci}" data-v="1">E</td>`;
+        return `<td class="cv-cell" data-ri="${_ri4}" data-ci="${ci}" data-v="0"></td>`;
       }).join('')+`</tr>`;
 
     // ROW 5: Entregas clientes — read-only
+    const _ri5=ri++;
     rows+=`<tr><td class="lbl lbl-del">🏠 Entregas clientes</td>`
-      +vis.map(m=>{const d=del[m];return `<td class="${d?'c-del':''}">${d||''}</td>`;}).join('')+`</tr>`;
+      +vis.map((m,ci)=>{const d=del[m];return `<td class="cv-cell${d?' c-del':''}" data-ri="${_ri5}" data-ci="${ci}" data-v="${d||0}">${d||''}</td>`;}).join('')+`</tr>`;
 
     // ROW 6: Hitos — read-only
+    ri++;
     rows+=`<tr><td class="lbl lbl-hit">📋 Hitos</td>`
       +vis.map(m=>{
         const ms=mil.filter(x=>x.date===m);
@@ -1018,12 +1026,66 @@ function rCroco(){
     </div>
     <div class="croco-filter">${cpills}</div>
     <div class="legend">${leg}</div>
-    <div class="croco-wrap"><table class="ct"><thead><tr>${thYr}</tr><tr>${thMo}</tr></thead><tbody>${rows}</tbody></table></div>
-    <div style="margin-top:8px;font-size:11px;color:#aaa">💡 <strong>Vendidas</strong>: clic para actualizar el acumulado real del mes. <strong>Ritmo ventas</strong> y <strong>Entregas</strong>: clic en la celda para editar. <strong>Hitos</strong>: clic en + para agregar, × para eliminar.</div>`;
+    <div class="croco-wrap"><table class="ct"><thead><tr>${thYr}</tr><tr>${thMo}</tr></thead><tbody>${rows}</tbody></table>
+    <div class="croco-statsbar" id="croco-statsbar"><span id="cs-avg"></span><span id="cs-cnt" style="margin-right:20px"></span><span id="cs-sum"></span><span style="float:right;cursor:pointer;opacity:0.7;font-weight:400;font-size:11px" onclick="_cvClear()">✕ Limpiar selección</span></div></div>
+    <div style="margin-top:8px;font-size:11px;color:#aaa">💡 Arrastra sobre las celdas para ver <strong>Promedio · Recuento · Suma</strong> (como en Excel). <strong>Ritmo ventas</strong> y <strong>Entregas</strong>: clic para editar.</div>`;
 }
 function toggleCF(proj){
   if(proj===null){S.crocoProjFilter=[];}else{const i=S.crocoProjFilter.indexOf(proj);if(i>=0)S.crocoProjFilter.splice(i,1);else S.crocoProjFilter.push(proj);}
   draw();
+}
+
+// ── SELECTION STATS (like Excel status bar) ──
+let _cvDrag=false,_cvR1=0,_cvC1=0,_cvR2=0,_cvC2=0;
+function _cvUpdateSel(){
+  const r1=Math.min(_cvR1,_cvR2),r2=Math.max(_cvR1,_cvR2);
+  const c1=Math.min(_cvC1,_cvC2),c2=Math.max(_cvC1,_cvC2);
+  let nums=[],cnt=0;
+  document.querySelectorAll('td.cv-cell').forEach(td=>{
+    const ri=+td.dataset.ri,ci=+td.dataset.ci;
+    const inS=(ri>=r1&&ri<=r2&&ci>=c1&&ci<=c2);
+    td.classList.toggle('sel',inS);
+    if(inS){cnt++;const v=+td.dataset.v;if(!isNaN(v)&&v>0)nums.push(v);}
+  });
+  const bar=document.getElementById('croco-statsbar');if(!bar)return;
+  if(cnt===0){bar.style.display='none';return;}
+  bar.style.display='block';
+  const fmt=v=>v%1===0?v.toString():v.toFixed(1);
+  const cntEl=document.getElementById('cs-cnt');
+  const avgEl=document.getElementById('cs-avg');
+  const sumEl=document.getElementById('cs-sum');
+  if(cntEl)cntEl.textContent='Recuento: '+cnt;
+  if(nums.length>0){
+    const sum=nums.reduce((a,b)=>a+b,0);
+    if(sumEl)sumEl.textContent='Suma: '+fmt(sum);
+    if(avgEl)avgEl.textContent='Promedio: '+fmt(sum/nums.length)+'  ·  ';
+  } else {if(sumEl)sumEl.textContent='';if(avgEl)avgEl.textContent='';}
+}
+function _cvClear(){
+  document.querySelectorAll('td.cv-cell.sel').forEach(td=>td.classList.remove('sel'));
+  const bar=document.getElementById('croco-statsbar');if(bar)bar.style.display='none';
+  _cvDrag=false;
+}
+function _initCrocoSel(){
+  const wrap=document.querySelector('.croco-wrap');
+  if(!wrap||wrap._selInited)return;
+  wrap._selInited=true;
+  wrap.addEventListener('mousedown',e=>{
+    const td=e.target.closest('td.cv-cell');
+    if(!td){_cvClear();return;}
+    _cvDrag=true;_cvR1=_cvR2=+td.dataset.ri;_cvC1=_cvC2=+td.dataset.ci;
+    _cvUpdateSel();e.preventDefault();
+  });
+  wrap.addEventListener('mouseover',e=>{
+    if(!_cvDrag)return;
+    const td=e.target.closest('td.cv-cell');
+    if(!td)return;
+    _cvR2=+td.dataset.ri;_cvC2=+td.dataset.ci;_cvUpdateSel();
+  });
+  document.addEventListener('mouseup',()=>{_cvDrag=false;});
+  document.addEventListener('click',e=>{
+    if(!e.target.closest('.croco-wrap')&&!e.target.closest('#croco-statsbar'))_cvClear();
+  });
 }
 
 // ── REGISTRAR ──────────────────────────────────────────
@@ -1487,7 +1549,7 @@ function saveM(area){
 function draw(){
   const el=document.getElementById('content');if(!el)return;
   if(S.view==='dashboard') el.innerHTML=rDash();
-  else if(S.view==='crocoveen') el.innerHTML=rCroco();
+  else if(S.view==='crocoveen'){el.innerHTML=rCroco();_initCrocoSel();}
   else if(S.view==='procesos') el.innerHTML=rProc();
   else if(S.view==='registrar') el.innerHTML=rReg();
   else if(S.view==='tareas') el.innerHTML=rTareas();

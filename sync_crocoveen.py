@@ -262,10 +262,10 @@ def parse_file(fpath):
                     elif v == 'E':
                         e_cols.append(j + 1)       # columna E = lista para entrega
 
-            # ¿Es fila de entregas?
-            n2 = str(nrow[1]).strip() if len(nrow) > 1 and nrow[1] is not None else ''
-            n3 = str(nrow[2]).strip() if len(nrow) > 2 and nrow[2] is not None else ''
-            if 'Cron' in n2 or 'Cron' in n3 or 'entregas' in n2.lower() or 'entregas' in n3.lower():
+            # ¿Es fila de entregas? — buscar en TODAS las celdas de texto de la fila
+            row_text = ' '.join(str(v).strip() for v in nrow if v is not None and isinstance(v, str)).lower()
+            if ('cron' in row_text or 'entregas' in row_text or
+                'cr\u00e9dito' in row_text or 'credito' in row_text):
                 for j, v in enumerate(nrow):
                     col = j + 1
                     if col in col_month and isinstance(v,(int,float)) and not isinstance(v,bool) and v > 0:
@@ -875,9 +875,16 @@ def update_html(all_results):
 
 # ── 6. Main ─────────────────────────────────────────────────────
 def main():
+    # Flag --no-email: sincroniza y hace push pero NO envía correo
+    no_email = '--no-email' in sys.argv
+
     print(f"📂 App:    {FOLDER}")
     print(f"📂 Excel:  {EXCEL_FOLDER}")
-    print(f"📄 HTML:   {HTML}\n")
+    print(f"📄 HTML:   {HTML}")
+    if no_email:
+        print("📧 Modo: sin correo (--no-email)\n")
+    else:
+        print()
 
     xl_files = [
         f for f in glob.glob(os.path.join(EXCEL_FOLDER, "*.xlsx"))
@@ -898,7 +905,10 @@ def main():
     print(f"\n── Total: {len(all_results)} torres parseadas ──")
     update_html(all_results)
     push_to_github(FOLDER)
-    send_reminder(all_results)
+    if no_email:
+        print("\n📧 Correo omitido (modo --no-email).")
+    else:
+        send_reminder(all_results)
 
 # ── 7. GitHub push ──────────────────────────────────────────────
 def push_to_github(folder):
