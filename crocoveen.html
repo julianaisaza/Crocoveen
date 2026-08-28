@@ -258,6 +258,9 @@ table.ct .th-mo.cur{top:28px;background:#e8f5e9;color:#2e7d32;font-weight:700;bo
   transition:background .2s}
 #login-btn:hover{background:#007060}
 #login-err{color:#c62828;font-size:13px;margin-top:10px;min-height:18px}
+.auth-spinner{width:28px;height:28px;border:3px solid #e0e0e0;border-top-color:#007060;
+  border-radius:50%;margin:6px auto 18px;animation:auth-spin .8s linear infinite}
+@keyframes auth-spin{ to{ transform:rotate(360deg); } }
 </style>
 </head>
 <body>
@@ -266,10 +269,8 @@ table.ct .th-mo.cur{top:28px;background:#e8f5e9;color:#2e7d32;font-weight:700;bo
     <div id="login-logo">🌿</div>
     <div id="login-title">Crocoveen</div>
     <div id="login-sub">Tierra Grata & Co.</div>
-    <input id="login-pw" type="password" placeholder="Contraseña" autocomplete="current-password"
-           onkeydown="if(event.key==='Enter')doLogin()">
-    <button id="login-btn" onclick="doLogin()">Entrar</button>
-    <div id="login-err"></div>
+    <div class="auth-spinner"></div>
+    <div id="login-err">Verificando acceso…</div>
   </div>
 </div>
 
@@ -1508,32 +1509,54 @@ function draw(){
 initSupabase();
 </script>
 
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3/lib/msal-browser.min.js"></script>
 <script>
-const PW_HASH='910430227a29285f3fc0b23d279be34a5efe722c6851fbee79b6405d522223ee';
-const SESSION_KEY='crocoveen_auth';
-async function sha256(str){
-  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
-  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-}
-async function doLogin(){
-  const pw=document.getElementById('login-pw').value;
-  const h=await sha256(pw);
-  if(h===PW_HASH){
-    sessionStorage.setItem(SESSION_KEY,'1');
-    document.getElementById('login-overlay').style.display='none';
-  } else {
-    document.getElementById('login-err').textContent='Contraseña incorrecta';
-    document.getElementById('login-pw').value='';
-    document.getElementById('login-pw').focus();
-  }
-}
-// Comprobar si ya está autenticado en esta sesión
-(function(){
-  if(sessionStorage.getItem(SESSION_KEY)==='1'){
-    document.addEventListener('DOMContentLoaded',function(){
-      const ov=document.getElementById('login-overlay');
-      if(ov) ov.style.display='none';
-    });
+(async function () {
+  var overlay = document.getElementById('login-overlay');
+  var msg = document.getElementById('login-err');
+  var ALLOWED_DOMAIN = '@tierragrata.co';
+
+  var msalConfig = {
+    auth: {
+      clientId: '11122dba-bff6-4d19-b020-40d776f0f954',
+      authority: 'https://login.microsoftonline.com/b54d5007-2ca4-4288-b2f4-c6735c13d0f7',
+      redirectUri: window.location.origin + window.location.pathname
+    },
+    cache: {
+      cacheLocation: 'sessionStorage',
+      storeAuthStateInCookie: false
+    }
+  };
+
+  try {
+    var msalInstance = new msal.PublicClientApplication(msalConfig);
+    await msalInstance.initialize();
+
+    var response = await msalInstance.handleRedirectPromise();
+    var account = response ? response.account : msalInstance.getActiveAccount();
+    if (!account) {
+      var accounts = msalInstance.getAllAccounts();
+      if (accounts.length > 0) account = accounts[0];
+    }
+
+    if (!account) {
+      msg.textContent = 'Redirigiendo al inicio de sesión de Microsoft…';
+      await msalInstance.loginRedirect({ scopes: ['User.Read'] });
+      return;
+    }
+
+    msalInstance.setActiveAccount(account);
+    var email = (account.username || '').toLowerCase();
+
+    if (!email.endsWith(ALLOWED_DOMAIN)) {
+      msg.innerHTML = 'Acceso restringido.<br>Esta herramienta es exclusiva para el equipo de Tierra Grata & Co.';
+      return;
+    }
+
+    overlay.style.display = 'none';
+  } catch (err) {
+    msg.textContent = 'Error al verificar el acceso. Intenta recargar la página.';
+    console.error(err);
   }
 })();
 </script>
