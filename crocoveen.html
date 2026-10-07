@@ -114,6 +114,7 @@ table.ct .th-mo.cur{top:28px;background:#e8f5e9;color:#2e7d32;font-weight:700;bo
 .lbl-pct{background:#fffde7;color:#e65100}
 .lbl-con{background:#f5f5f5;color:#546e7a}
 .lbl-del{background:#fce4ec;color:#880e4f}
+.lbl-val{background:#f3e5f5;color:#4a148c}
 .lbl-hit{background:#e3f2fd;color:#0d47a1}
 .t-hdr{color:#fff;font-weight:700;font-size:12px;text-align:left;padding:5px 10px;cursor:default}
 .c-sales{background:#c8e6c9;color:#1b5e20;font-weight:700;cursor:pointer}
@@ -126,6 +127,7 @@ table.ct .th-mo.cur{top:28px;background:#e8f5e9;color:#2e7d32;font-weight:700;bo
 .c-econ{background:#b2dfdb;color:#004d40;font-weight:700}
 .c-del{background:#f48fb1;color:#880e4f;font-weight:700;cursor:pointer}
 .c-del:hover{background:#f06292}
+.c-val{background:#e1bee7;color:#4a148c;font-weight:700;font-size:10px;white-space:nowrap}
 .c-hit{background:#bbdefb;color:#0d47a1;font-size:9px;font-weight:700;cursor:pointer}
 .c-hit:hover{background:#90caf9}
 .cv-cell.sel{outline:2px solid #0D3D52 !important;background:rgba(13,61,82,0.13) !important;position:relative;z-index:1}
@@ -461,27 +463,51 @@ const S={
     'V-T2A':{start:'2029-11',end:'2032-02',eEnd:'2032-05'},
     'V-T2B':{start:'2030-07',end:'2032-06',eEnd:'2032-09'},
     'Z-T1':{start:'2026-10',end:'2026-12',eEnd:'2027-09'},
-    'Z-T2':{start:'2026-11',end:'2028-06',eEnd:'2028-09'},
+    'Z-T2':{start:'2026-11',end:'2028-02',eEnd:'2028-05'},
   },
 
   deliveries:{
     'A-T1A':{'2027-05':9,'2027-06':3,'2027-08':1,'2027-09':13,'2027-12':17},
-    'A-T1B':{'2027-08':1,'2027-09':1,'2027-11':15,'2027-12':24,'2028-01':2,'2028-03':2,'2028-04':1,'2028-06':10,'2028-07':3},
-    'A-T1C':{'2028-10':19},
-    'B-T1':{'2028-02':31,'2028-06':3,'2028-08':19,'2028-09':2},
-    'B-T2A':{'2029-04':11},
-    'C-T1A':{'2026-10':1,'2026-12':19,'2027-01':2,'2027-05':7,'2027-10':1},
-    'C-T1B':{'2026-10':4,'2026-12':14,'2027-02':1,'2027-05':5},
-    'C-T2A':{'2027-02':2,'2028-03':7,'2028-04':86,'2028-12':10},
-    'CV-T4':{'2026-10':2,'2026-11':1,'2026-12':23,'2027-02':4,'2027-05':1,'2027-06':23,'2027-08':1},
-    'M-T3A':{'2026-11':5,'2027-01':1,'2027-02':4},
-    'M-T3B':{'2027-06':20,'2027-11':2,'2027-12':2,'2028-01':18,'2028-02':1,'2028-03':3},
-    'M-T4A':{'2028-03':17,'2028-04':1,'2028-10':6},
-    'S-T1':{'2028-10':1,'2028-11':53,'2028-12':4,'2029-01':4},
-    'S-T2':{'2029-07':8},
-    'SG-T1':{'2029-01':1,'2029-02':2,'2029-08':16},
-    'Z-T1':{'2026-10':1,'2026-11':6,'2026-12':11,'2027-01':1,'2027-03':7,'2027-09':31},
-    'Z-T2':{'2028-04':6,'2028-11':24},
+    'A-T1B':{'2027-08':1,'2027-09':1,'2027-11':15,'2027-12':24,'2028-01':3,'2028-03':2,'2028-04':1,'2028-06':10,'2028-07':3},
+    'A-T1C':{'2028-10':18,'2029-04':8},
+    'B-T1':{'2028-02':31,'2028-06':3,'2028-08':22,'2028-09':2},
+    'B-T2A':{'2029-04':10,'2029-07':1},
+    'C-T1A':{'2026-10':17,'2026-11':2,'2026-12':22,'2027-01':2,'2027-05':7,'2027-10':1},
+    'C-T1B':{'2026-10':6,'2026-11':1,'2026-12':14,'2027-02':2,'2027-03':2,'2027-05':5},
+    'C-T2A':{'2028-03':6,'2028-04':86,'2028-12':12},
+    'C-T2B':{'2029-09':7},
+    'CV-T4':{'2026-10':2,'2026-11':5,'2026-12':27,'2027-02':5,'2027-06':20,'2027-08':2},
+    'M-T3A':{'2026-11':5,'2027-02':5},
+    'M-T3B':{'2027-06':22,'2027-11':2,'2027-12':2,'2028-01':18,'2028-02':1,'2028-03':3},
+    'M-T4A':{'2028-03':17,'2028-04':1,'2028-10':8},
+    'M-T4B':{'2029-11':2},
+    'S-T1':{'2028-11':53,'2028-12':4,'2029-01':4,'2029-03':1,'2029-04':1,'2029-10':1},
+    'S-T2':{'2029-07':18},
+    'SG-T1':{'2029-01':1,'2029-02':2,'2029-08':23},
+    'Z-T1':{'2026-10':1,'2026-11':6,'2026-12':11,'2027-01':1,'2027-03':6,'2027-09':31},
+    'Z-T2':{'2028-04':6,'2028-11':35},
+  },
+
+  deliveriesVal:{
+    'A-T1A':{'2027-05':2258464567,'2027-06':836551189,'2027-08':248395000,'2027-09':2961638773,'2027-12':3733481126},
+    'A-T1B':{'2027-08':227245200,'2027-09':245448323,'2027-11':3898982874,'2027-12':6689242842,'2028-01':817787662,'2028-03':580115270,'2028-04':233509725,'2028-06':2523760654,'2028-07':663484026},
+    'A-T1C':{'2028-10':5637456991,'2029-04':2543496030},
+    'B-T1':{'2028-02':19647687928,'2028-06':707295820,'2028-08':17553169885,'2028-09':1693240842},
+    'B-T2A':{'2029-04':8793737700,'2029-07':886517494},
+    'C-T1A':{'2026-10':4133675251,'2026-11':447681957,'2026-12':6550794196,'2027-01':450483442,'2027-05':2814173376,'2027-10':441749869},
+    'C-T1B':{'2026-10':1940406755,'2026-11':159642882,'2026-12':5801467533,'2027-02':1056853434,'2027-05':3053693437},
+    'C-T2A':{'2028-03':3186623416,'2028-04':41415623066,'2028-12':6297636532},
+    'C-T2B':{'2029-09':5182506577},
+    'CV-T4':{'2026-10':821043788,'2026-11':1568128128,'2026-12':11053130996,'2027-02':2544993300,'2027-06':9590981512,'2027-08':1071859842},
+    'M-T3A':{'2026-11':1681144916,'2027-02':2155883511},
+    'M-T3B':{'2027-06':15113372695,'2027-11':1307762318,'2027-12':1223963090,'2028-01':11219449517,'2028-02':510396000,'2028-03':1133455581},
+    'M-T4A':{'2028-03':10675433480,'2028-04':724844940,'2028-10':5243799645},
+    'M-T4B':{'2029-11':1511695274},
+    'S-T1':{'2028-11':43292214635,'2028-12':3014608973,'2029-01':3181994887,'2029-03':761881001,'2029-04':1015000000,'2029-10':1113157686},
+    'S-T2':{'2029-07':17609936783},
+    'SG-T1':{'2029-01':1093692600,'2029-02':2262343912,'2029-08':24072598905},
+    'Z-T1':{'2026-10':530715924,'2026-11':3304571046,'2026-12':6531199249,'2027-01':726611963,'2027-03':3577544790,'2027-09':22778033317},
+    'Z-T2':{'2028-04':4276106855,'2028-11':29690162332},
   },
 
   milestones:[
@@ -553,6 +579,7 @@ const S={
     {id:603741,tid:'B-T1',type:'Escritura de RPH',date:'2027-12',desc:'Escritura de RPH · B-T1'},
     {id:442508,tid:'S-T1S2',type:'Licencia de Urbanismo',date:'2027-12',desc:'Licencia de Urbanismo · S-T1S2'},
     {id:807795,tid:'S-T1S2',type:'Acuerdo Pago de Obligaciones Urbaní',date:'2027-12',desc:'Acuerdo Pago de Obligaciones Urbanísticas · S-T1S2'},
+    {id:343593,tid:'Z-T2',type:'Escritura de RPH',date:'2027-12',desc:'Escritura de RPH · Z-T2'},
     {id:266075,tid:'Lu-T1',type:'Licencia de Subdivisión + Constituc',date:'2028-01',desc:'Licencia de Subdivisión + Constitución Urbanización · Lúmina'},
     {id:512305,tid:'M-T4C',type:'Factibilidad',date:'2028-01',desc:'Factibilidad · M-T4C'},
     {id:421869,tid:'M-T4C',type:'Creación de Fiducia Centro de costo',date:'2028-01',desc:'Creación de Fiducia Centro de costos · M-T4C'},
@@ -567,7 +594,6 @@ const S={
     {id:813123,tid:'V-T1A',type:'Acuerdo Pago de Obligaciones Urbaní',date:'2028-03',desc:'Acuerdo Pago de Obligaciones Urbanísticas · V-T1A'},
     {id:638913,tid:'B-T3',type:'Inicio Licencia de Construcción',date:'2028-04',desc:'Inicio Licencia de Construcción · B-T3'},
     {id:137109,tid:'C-T2A',type:'Escritura de RPH',date:'2028-04',desc:'Escritura de RPH · C-T2A'},
-    {id:343593,tid:'Z-T2',type:'Escritura de RPH',date:'2028-04',desc:'Escritura de RPH · Z-T2'},
     {id:589826,tid:'V-T1B',type:'Factibilidad',date:'2028-05',desc:'Factibilidad · V-T1B'},
     {id:940964,tid:'V-T1B',type:'Creación de Fiducia Centro de costo',date:'2028-05',desc:'Creación de Fiducia Centro de costos · V-T1B'},
     {id:461059,tid:'B-T2B',type:'Poliza TRC RC Decenal',date:'2028-06',desc:'Poliza TRC RC Decenal · B-T2B'},
@@ -714,6 +740,7 @@ function getVisMonths(shown){
   for(const t of shown){
     for(const m of Object.keys(S.rhythm[t.id]||{})) if(m>maxM) maxM=m;
     for(const m of Object.keys(S.deliveries[t.id]||{})) if(m>maxM) maxM=m;
+    for(const m of Object.keys((S.deliveriesVal||{})[t.id]||{})) if(m>maxM) maxM=m;
     const c=S.constr[t.id];if(c&&c.end>maxM) maxM=c.end;
     if(c&&c.eEnd&&c.eEnd>maxM) maxM=c.eEnd;
   }
@@ -843,6 +870,7 @@ function rCroco(){
     const cM=_c?mBetween(_c.start,_c.end):new Set();
     const eM=(_c&&_c.eEnd)?mBetween(addM(_c.end,1),_c.eEnd):new Set();
     const del=S.deliveries[t.id]||{};
+    const dvl=(S.deliveriesVal||{})[t.id]||{};
     const rhm=S.rhythm[t.id]||{};
     const mil=S.milestones.filter(x=>x.tid===t.id);
 
@@ -894,6 +922,16 @@ function rCroco(){
     rows+=`<tr><td class="lbl lbl-del">🏠 Entregas clientes</td>`
       +vis.map((m,ci)=>{const d=del[m];return `<td class="cv-cell${d?' c-del':''}" data-ri="${_ri5}" data-ci="${ci}" data-v="${d||0}">${d||''}</td>`;}).join('')+`</tr>`;
 
+    // ROW 5-bis: Valor entregas (COP) — read-only
+    const _ri5b=ri++;
+    const fmtVal=v=>'$'+Math.round(v/1e6).toLocaleString('es-CO')+' M';
+    rows+=`<tr><td class="lbl lbl-val">💰 Valor entregas</td>`
+      +vis.map((m,ci)=>{
+        const v=dvl[m];
+        const tip=v?('$'+v.toLocaleString('es-CO')):'';
+        return `<td class="cv-cell${v?' c-val':''}" data-ri="${_ri5b}" data-ci="${ci}" data-v="${v||0}" title="${tip}">${v?fmtVal(v):''}</td>`;
+      }).join('')+`</tr>`;
+
     // ROW 6: Hitos — read-only
     ri++;
     rows+=`<tr><td class="lbl lbl-hit">📋 Hitos</td>`
@@ -911,7 +949,7 @@ function rCroco(){
     rows+=`<tr><td class="c-sep" colspan="${vis.length+2}"></td></tr>`;
   }
 
-  const leg=[['#c8e6c9','Ritmo ventas'],['#fb8c00','PE 70%'],['#ffe0b2','Post-PE'],['#b0bec5','Construcción (C)'],['#b2dfdb','Lista entrega (E)'],['#f48fb1','Entregas'],['#bbdefb','Hitos']]
+  const leg=[['#c8e6c9','Ritmo ventas'],['#fb8c00','PE 70%'],['#ffe0b2','Post-PE'],['#b0bec5','Construcción (C)'],['#b2dfdb','Lista entrega (E)'],['#f48fb1','Entregas'],['#e1bee7','Valor $'],['#bbdefb','Hitos']]
     .map(([bg,l])=>`<div class="leg-item"><div class="leg-dot" style="background:${bg}"></div>${l}</div>`).join('');
 
   const cpills=`<div class="croco-pill ${S.crocoProjFilter.length===0?'on':''}" onclick="toggleCF(null)">Todos</div>`
