@@ -1550,6 +1550,19 @@ initSupabase();
   var overlay = document.getElementById('login-overlay');
   var msg = document.getElementById('login-err');
   var ALLOWED_DOMAIN = '@tierragrata.co';
+var __embedEmail = null;
+  if (window.self !== window.top) {
+    __embedEmail = await new Promise(function (res) {
+      var done = false, TO = setTimeout(function () { if (!done) { done = true; res(null); } }, 4000);
+      window.addEventListener('message', function h(ev) {
+        if (ev.origin === 'https://analiticacomercialtg.netlify.app' && ev.data && ev.data.tgAuth === 'ok' && typeof ev.data.email === 'string') {
+          if (!done) { done = true; clearTimeout(TO); window.removeEventListener('message', h); res(ev.data.email.toLowerCase()); }
+        }
+      });
+      try { window.parent.postMessage({ tgAuth: 'who' }, 'https://analiticacomercialtg.netlify.app'); } catch (e) {}
+    });
+  }
+  var __fakeMsal = function (email) { var acc = { username: email, name: email }; return { initialize: async function () {}, handleRedirectPromise: async function () { return { account: acc }; }, getActiveAccount: function () { return acc; }, getAllAccounts: function () { return [acc]; }, setActiveAccount: function () {}, ssoSilent: async function () { return { account: acc }; }, loginRedirect: async function () {} }; };
 
   var msalConfig = {
     auth: {
@@ -1564,7 +1577,7 @@ initSupabase();
   };
 
   try {
-    var msalInstance = new msal.PublicClientApplication(msalConfig);
+    var msalInstance = __embedEmail ? __fakeMsal(__embedEmail) : new msal.PublicClientApplication(msalConfig);
     await msalInstance.initialize();
 
     var response = await msalInstance.handleRedirectPromise();
@@ -1576,8 +1589,20 @@ initSupabase();
 
     if (!account) {
       msg.textContent = 'Redirigiendo al inicio de sesión de Microsoft…';
-      await msalInstance.loginRedirect({ scopes: ['User.Read'] });
-      return;
+      if (window.self !== window.top) {
+        try {
+          var lh = new URLSearchParams(location.search).get('lh');
+          var sr = await msalInstance.ssoSilent({ scopes: ['User.Read'], loginHint: lh || undefined });
+          account = sr.account;
+        } catch (se) { account = null; }
+        if (!account) {
+          msg.innerHTML = 'Para ver esta herramienta inicia sesión en una pestaña nueva.<br><a href="' + location.href.split('?')[0] + '" target="_blank" rel="noopener" style="color:#F7A400">Abrir en pestaña nueva ↗</a>';
+          return;
+        }
+      } else {
+        await msalInstance.loginRedirect({ scopes: ['User.Read'] });
+        return;
+      }
     }
 
     msalInstance.setActiveAccount(account);
